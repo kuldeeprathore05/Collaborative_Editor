@@ -42,7 +42,7 @@ router.post("/signup", async(req, res)=>{
 
 router.post("/login", async(req, res)=>{
   try {
-    const {email,password} = req.body;
+    const {email,password} = req.body; 
 
     if (!email || !password) {
       return res.status(400).json({message:"Email and password are required"});
@@ -51,8 +51,7 @@ router.post("/login", async(req, res)=>{
     const user = await User.findOne({email});
     if (!user) {
       return res.status(401).json({message:"Invalid email or password" });
-    }
-
+    } 
     const isok = await bcrypt.compare(password, user.password);
     if (!isok) {
       return res.status(401).json({message:"Invalid email or password"});

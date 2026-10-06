@@ -21,6 +21,7 @@ const Dashboard = () => {
       try {
         const res = await api.get("/rooms/my-rooms");
         setMyRooms(res.data.rooms);
+        console.log(res.data.rooms);
       } catch (err) {
         console.error(err);
       }
@@ -111,6 +112,31 @@ const Dashboard = () => {
             Create new room
           </Button>
         </div>
+        {myRooms.length > 0 && (
+          <div className="mt-6">
+            <h2 className="text-[13px] font-semibold text-white">
+              Recent rooms
+            </h2>
+
+            <div className="mt-2 space-y-2">
+              {myRooms.map((room) => (
+                <button
+                  key={room._id}
+                  onClick={() => navigate(`/room/${room.roomId}`)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:bg-zinc-800"
+                >
+                  <div className="font-mono text-[12px] text-white">
+                    {room.roomId}
+                  </div>
+
+                  <div className="mt-1 text-[10px] text-zinc-500">
+                    Language: {room.currentLanguage}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
  
       </div>
     </main>
