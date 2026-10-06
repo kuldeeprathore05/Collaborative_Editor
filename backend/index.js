@@ -17,6 +17,13 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/rooms", roomRoutes);
 
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    message: "Server is healthy",
+    timestamp: new Date().toISOString()
+  });
+});
 const server = http.createServer(app);
 const io = new Server(server,{cors:{origin:"*" } });
 
