@@ -6,7 +6,7 @@ const router = express.Router();
  
 router.get("/my-rooms",protectRoute,async (req, res) => {
   try {
-    const rooms = await Room.find({createdBy:req.userId }).sort({updatedAt:-1});
+    const rooms = await Room.find({createdBy:req.userId }).sort({updatedAt:-1}).limit(10);;
     res.json({rooms});
   } catch (err) {
     res.status(500).json({message: "Server error fetching rooms"});

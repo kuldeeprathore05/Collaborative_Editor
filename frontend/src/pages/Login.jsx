@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom"; 
 import api from "../api.js";
 import { useAuth } from "../context/AuthContext.jsx"; 
-import {toast} from "sonner"
+import toast from "react-hot-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label"; 

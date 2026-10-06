@@ -11,7 +11,32 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Toaster />
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: "#18181b",
+              color: "#fafafa",
+              border: "1px solid #27272a",
+              borderRadius: "10px",
+              padding: "12px 16px",
+              fontSize: "14px",
+            },
+            success: {
+              iconTheme: {
+                primary: "#22c55e",
+                secondary: "#18181b",
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: "#ef4444",
+                secondary: "#18181b",
+              },
+            },
+          }}
+        />
         <Routes>
           <Route path="/signup" element={<Signup />} />
           <Route path="/login" element={<Login />} />
