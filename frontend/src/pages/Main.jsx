@@ -39,7 +39,7 @@ const Main = () => {
     socket.emit("join", { roomId, token, userName: user?.name });
 
     const handleUserList = (list) => setUsers(list);
-    const handleCodeUpdate = (newCode) => setCode(newCode);
+    // const handleCodeUpdate = (newCode) => setCode(newCode);
     const handleLanguageUpdate = (lang) => setLanguage(lang);
     const handleCodeResponse = (res) => setOutPut(res.run.output);
     const handleChatHistory = (history) => setMessages(history);
@@ -53,7 +53,7 @@ const Main = () => {
     };
 
     socket.on("userList", handleUserList);
-    socket.on("codeUpdate", handleCodeUpdate);
+    // socket.on("codeUpdate", handleCodeUpdate);
     socket.on("languageUpdate", handleLanguageUpdate);
     socket.on("codeResponse", handleCodeResponse);
     socket.on("newMessage", handleNewMessage);
@@ -61,7 +61,7 @@ const Main = () => {
 
     return () => {
       socket.off("userList", handleUserList);
-      socket.off("codeUpdate", handleCodeUpdate);
+      // socket.off("codeUpdate", handleCodeUpdate);
       socket.off("languageUpdate", handleLanguageUpdate);
       socket.off("codeResponse", handleCodeResponse);
       socket.off("newMessage", handleNewMessage);
@@ -80,7 +80,7 @@ const Main = () => {
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
-    socket.emit("codeChange", { roomId, code: newCode });
+    // socket.emit("codeChange", { roomId, code: newCode });
   };
 
   const handleLanguageChange = (val) => {
@@ -88,11 +88,14 @@ const Main = () => {
     socket.emit("languageChange", { roomId, language: val });
   };
 
+  // const runCode = () => {
+  //   setOutPut("Running code...");
+  //   socket.emit("compileCode", { code, roomId, language, input: userInput });
+  // };
   const runCode = () => {
     setOutPut("Running code...");
-    socket.emit("compileCode", { code, roomId, language, input: userInput });
+    socket.emit("compileCode", { input: userInput });
   };
-
   const sendMessage = (text) => {
     socket.emit("sendMessage", { roomId, msg: { text, user: user?.name } });
   };

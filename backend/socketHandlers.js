@@ -1,156 +1,146 @@
-import {executeCode} from "./piston.js"; 
-import Room from "./models/Room.js";  
- 
-const rooms = new Map(); 
+import * as Y from "yjs";
+import { executeCode } from "./piston.js";
+import Room from "./models/Room.js";
+import { verifySocketToken } from "./middleware/authMiddleware.js";
+
+const LANGS = ["javascript", "python", "cpp", "java"];
+const rooms = new Map();       // roomId -> Promise<room>   (promise avoids the cold-start join race)
 const saveTimers = new Map();
 
-export const handleSocketEvents=(io)=>{
-  io.on("connection", (socket)=>{
+const userList = (room) => [...new Set(room.users.values())];
+
+const saveRoom = async (roomId, room) => {
+  const $set = { currentLanguage: room.language };
+  for (const l of LANGS) $set[`codeSnippets.${l}`] = room.doc.getText(l).toString();
+  try {
+    await Room.updateOne({ roomId }, { $set });
+  } catch (err) {
+    console.error("Database save error:", err);
+  }
+};
+
+const scheduleSave = (roomId, room) => {
+  clearTimeout(saveTimers.get(roomId));
+  saveTimers.set(roomId, setTimeout(() => saveRoom(roomId, room), 3000));
+};
+
+const getRoom = (roomId) => {
+  if (!rooms.has(roomId)) {
+    const p = (async () => {
+      const doc = new Y.Doc();
+      let language = "javascript";
+      let snippets = null;
+      try {
+        const dbRoom = await Room.findOne({ roomId });
+        if (dbRoom) {
+          language = dbRoom.currentLanguage || "javascript";
+          snippets = dbRoom.codeSnippets;
+        }
+      } catch (err) {
+        console.error("Error fetching room:", err);
+      }
+      doc.transact(() => {
+        for (const l of LANGS) {
+          doc.getText(l).insert(0, snippets?.get?.(l) ?? `// start coding in ${l}...`);
+        }
+      });
+      const room = { doc, language, users: new Map(), messages: [] };
+      doc.on("update", () => scheduleSave(roomId, room));   // registered after hydration
+      return room;
+    })();
+    p.catch(() => rooms.delete(roomId));
+    rooms.set(roomId, p);
+  }
+  return rooms.get(roomId);
+};
+
+export const handleSocketEvents = (io) => {
+  io.on("connection", (socket) => {
     console.log("New user connected:", socket.id);
 
-    // join room
-    socket.on("join", async ({roomId,token,userName})=>{
-      if (socket.currentRoom) leaveRoom(io, socket);
+    socket.on("join", async ({ roomId, token }) => {
+      const payload = verifySocketToken(token);          // identity comes from the token, not the client
+      if (!payload || !roomId) return socket.emit("authError");
 
+      if (socket.currentRoom) await leaveRoom(io, socket);
       socket.currentRoom = roomId;
-      socket.currentUser = userName;
-      socket.join(roomId); 
+      socket.currentUser = payload.name;
+      socket.join(roomId);
 
-      if (!rooms.has(roomId)) {
-        let existingCode = "// start coding...";
-        let savedLanguage = "javascript";
-        let snippetsMap = new Map();
+      const room = await getRoom(roomId);
+      room.users.set(socket.id, payload.name);
 
-        try {
-          const dbRoom = await Room.findOne({roomId});
-          if (dbRoom) {
-            savedLanguage = dbRoom.currentLanguage || "javascript";
-            snippetsMap = dbRoom.codeSnippets || new Map();
- 
-            if (snippetsMap.get && snippetsMap.get(savedLanguage)) {
-              existingCode = snippetsMap.get(savedLanguage);
-            }
-          }
-        } catch (err) {
-          console.error("Error fetching room from MongoDB:", err);
-        }
- 
-        rooms.set(roomId, {
-          users: new Set(),
-          language: savedLanguage,
-          codeSnippets: snippetsMap,
-          output: "",
-          messages: [],
-        });
-      }
-
-      const room = rooms.get(roomId);
-      if (userName) room.users.add(userName); 
-      io.to(roomId).emit("userList", Array.from(room.users));
+      io.to(roomId).emit("userList", userList(room));
       socket.emit("languageUpdate", room.language);
-       
-      const currentCode = room.codeSnippets.get
-        ? (room.codeSnippets.get(room.language) || "// start coding...")
-        : "// start coding...";
-
-      socket.emit("codeUpdate", currentCode);
-      socket.emit("chatHistory", room.messages || []);
+      socket.emit("yjsSync", Y.encodeStateAsUpdate(room.doc));   // full state for the joiner
+      socket.emit("chatHistory", room.messages);
+      socket.to(roomId).emit("awarenessQuery");                    // ask others to re-send their cursors
     });
- 
-    // change lang
-    socket.on("languageChange", ({roomId,language}) => {
-      if (!rooms.has(roomId)) return;
-      const room = rooms.get(roomId);
 
+    // document operations (binary Yjs updates)
+    socket.on("yjsUpdate", async (update) => {
+      const roomId = socket.currentRoom;
+      if (!roomId) return;
+      const room = await getRoom(roomId);
+      Y.applyUpdate(room.doc, new Uint8Array(update), socket.id);
+      socket.to(roomId).emit("yjsUpdate", update);
+    });
+
+    // cursors / selections / names (ephemeral)
+    socket.on("awarenessUpdate", ({ update, clientID }) => {
+      const roomId = socket.currentRoom;
+      if (!roomId) return;
+      socket.awarenessId = clientID;
+      socket.to(roomId).emit("awarenessUpdate", update);
+    });
+
+    socket.on("languageChange", async ({ language }) => {
+      const roomId = socket.currentRoom;
+      if (!roomId || !LANGS.includes(language)) return;
+      const room = await getRoom(roomId);
       room.language = language;
- 
-      const selectedLanguageCode = room.codeSnippets.get
-        ? (room.codeSnippets.get(language) || `// start coding in ${language}...`)
-        : `// start coding in ${language}...`;
- 
       io.to(roomId).emit("languageUpdate", language);
-      io.to(roomId).emit("codeUpdate", selectedLanguageCode);
+      scheduleSave(roomId, room);
     });
 
-    //code change
-    socket.on("codeChange", ({roomId,code})=>{
-      if (!rooms.has(roomId)) return;
-      const room = rooms.get(roomId); 
-      const activeLanguage = room.language || "javascript";
- 
-      if (room.codeSnippets.set) {
-        room.codeSnippets.set(activeLanguage, code);
-      }
- 
-      socket.to(roomId).emit("codeUpdate", code);
- 
-      if (saveTimers.has(roomId)) {
-        clearTimeout(saveTimers.get(roomId));
-      }
-
-      const timer = setTimeout(async () => {
-        try {
-          await Room.findOneAndUpdate(
-            { roomId: roomId },
-            {
-              $set: {
-                [`codeSnippets.${activeLanguage}`]: code,
-                currentLanguage: activeLanguage,
-              },
-            },
-            {upsert:true}
-          );
-          console.log(`Saved ${activeLanguage} code for room ${roomId} to MongoDB`);
-        }catch(err){
-          console.error("Database save error:", err);
-        }
-      }, 5000);
-
-      saveTimers.set(roomId, timer);
-    });
-
-    // exceute code
-    socket.on("compileCode", async ({code,roomId,language,input}) => {
-      if (!rooms.has(roomId)) return;
-      const room = rooms.get(roomId);
-
-      const result = await executeCode({code,language,input});
-      room.output = result.run.output;
-
+    socket.on("compileCode", async ({ input }) => {
+      const roomId = socket.currentRoom;
+      if (!roomId) return;
+      const room = await getRoom(roomId);
+      const code = room.doc.getText(room.language).toString();   // server's authoritative copy
+      const result = await executeCode({ code, language: room.language, input });
       io.to(roomId).emit("codeResponse", result);
     });
- 
-    // chad msg
-    socket.on("sendMessage", ({ roomId, msg }) => {
-      if (!rooms.has(roomId)) return;
-      const room = rooms.get(roomId);
 
-      room.messages.push(msg);
-      io.to(roomId).emit("newMessage", msg); 
+    socket.on("sendMessage", async ({ msg }) => {
+      const roomId = socket.currentRoom;
+      if (!roomId || !msg?.text) return;
+      const room = await getRoom(roomId);
+      const m = { text: String(msg.text).slice(0, 2000), user: socket.currentUser }; // can't impersonate
+      room.messages.push(m);
+      io.to(roomId).emit("newMessage", m);
     });
 
-    // diconnectt
-    socket.on("disconnect", () => {
-      leaveRoom(io, socket);
-      console.log("User disconnected");
-    });
+    socket.on("leaveRoom", () => leaveRoom(io, socket));
+    socket.on("disconnect", () => leaveRoom(io, socket));
   });
 };
 
-// leave room
-const leaveRoom = (io, socket) => {
-  const {currentRoom,currentUser } = socket;
-  if (currentRoom && currentUser && rooms.has(currentRoom)) {
-    rooms.get(currentRoom).users.delete(currentUser);
-
-    io.to(currentRoom).emit(
-      "userList",
-      Array.from(rooms.get(currentRoom).users)
-    );
-
-    socket.leave(currentRoom);
-    console.log(`${currentUser} left room ${currentRoom}`);
-  }
+const leaveRoom = async (io, socket) => {
+  const roomId = socket.currentRoom;
   socket.currentRoom = null;
   socket.currentUser = null;
+  if (!roomId) return;
+
+  socket.leave(roomId);
+  const p = rooms.get(roomId);
+  if (p) {
+    const room = await p;
+    room.users.delete(socket.id);
+    io.to(roomId).emit("userList", userList(room));
+  }
+  if (socket.awarenessId != null) {
+    io.to(roomId).emit("awarenessRemove", socket.awarenessId);
+    socket.awarenessId = null;
+  }
 };
