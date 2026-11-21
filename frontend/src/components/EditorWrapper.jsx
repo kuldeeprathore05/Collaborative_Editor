@@ -44,12 +44,23 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
       if (origin !== "remote") sendMyAwareness();
     };
     const onRemoteDoc = (u) => Y.applyUpdate(ydoc, toU8(u), "remote");
+
+    const onSync = (u) => {
+        const serverUpdate = toU8(u);
+        Y.applyUpdate(ydoc, serverUpdate, "remote");
+        // send back only what the server doesn't have (offline edits)
+        socket.emit(
+          "yjsUpdate",
+          Y.encodeStateAsUpdate(ydoc, Y.encodeStateVectorFromUpdate(serverUpdate))
+        );
+        sendMyAwareness(); // re-announce my cursor/name
+    };
     const onRemoteAwareness = (u) => applyAwarenessUpdate(awareness, toU8(u), "remote");
     const onAwarenessRemove = (id) => removeAwarenessStates(awareness, [id], "remote");
 
     ydoc.on("update", onDocUpdate);
     awareness.on("update", onAwarenessChange);
-    socket.on("yjsSync", onRemoteDoc);
+    socket.on("yjsSync", onSync);
     socket.on("yjsUpdate", onRemoteDoc);
     socket.on("awarenessUpdate", onRemoteAwareness);
     socket.on("awarenessRemove", onAwarenessRemove);
@@ -83,7 +94,7 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
     setSession({ ydoc, awareness });
 
     return () => {
-      socket.off("yjsSync", onRemoteDoc);
+      socket.off("yjsSync", onSync);
       socket.off("yjsUpdate", onRemoteDoc);
       socket.off("awarenessUpdate", onRemoteAwareness);
       socket.off("awarenessRemove", onAwarenessRemove);

@@ -34,12 +34,15 @@ const Main = () => {
       navigate("/login");
       return;
     }
+    const join = () => socket.emit("join", { roomId, token });
 
+    socket.on("connect", join);   // fires on first connect AND every reconnect
     socket.connect();
-    socket.emit("join", { roomId, token, userName: user?.name });
+    if (socket.connected) join();
+    
+ 
 
-    const handleUserList = (list) => setUsers(list);
-    // const handleCodeUpdate = (newCode) => setCode(newCode);
+    const handleUserList = (list) => setUsers(list); 
     const handleLanguageUpdate = (lang) => setLanguage(lang);
     const handleCodeResponse = (res) => setOutPut(res.run.output);
     const handleChatHistory = (history) => setMessages(history);
@@ -52,16 +55,15 @@ const Main = () => {
       });
     };
 
-    socket.on("userList", handleUserList);
-    // socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("userList", handleUserList); 
     socket.on("languageUpdate", handleLanguageUpdate);
     socket.on("codeResponse", handleCodeResponse);
     socket.on("newMessage", handleNewMessage);
     socket.on("chatHistory", handleChatHistory);
 
     return () => {
-      socket.off("userList", handleUserList);
-      // socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("connect", join);
+      socket.off("userList", handleUserList); 
       socket.off("languageUpdate", handleLanguageUpdate);
       socket.off("codeResponse", handleCodeResponse);
       socket.off("newMessage", handleNewMessage);
@@ -79,19 +81,13 @@ const Main = () => {
   };
 
   const handleCodeChange = (newCode) => {
-    setCode(newCode);
-    // socket.emit("codeChange", { roomId, code: newCode });
+    setCode(newCode); 
   };
 
   const handleLanguageChange = (val) => {
     setLanguage(val);
     socket.emit("languageChange", { roomId, language: val });
-  };
-
-  // const runCode = () => {
-  //   setOutPut("Running code...");
-  //   socket.emit("compileCode", { code, roomId, language, input: userInput });
-  // };
+  }; 
   const runCode = () => {
     setOutPut("Running code...");
     socket.emit("compileCode", { input: userInput });
