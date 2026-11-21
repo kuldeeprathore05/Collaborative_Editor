@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState ,useRef} from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import socket from "../socket.js";
 import EditorWrapper from "../components/EditorWrapper.jsx";
@@ -27,6 +27,7 @@ const Main = () => {
   const [messages, setMessages] = useState([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const isChatOpenRef = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -49,10 +50,7 @@ const Main = () => {
 
     const handleNewMessage = (msg) => {
       setMessages((prev) => [...prev, msg]);
-      setIsChatOpen((currentlyOpen) => {
-        if (!currentlyOpen) setUnreadCount((prev) => prev + 1);
-        return currentlyOpen;
-      });
+      if (!isChatOpenRef.current) setUnreadCount((c) => c + 1);
     };
 
     socket.on("userList", handleUserList); 
@@ -97,8 +95,10 @@ const Main = () => {
   };
 
   const toggleChat = () => {
-    setIsChatOpen(!isChatOpen);
-    if (!isChatOpen) setUnreadCount(0);
+    const next = !isChatOpen;
+    setIsChatOpen(next);
+    isChatOpenRef.current = next;
+    if (next) setUnreadCount(0);
   };
   
   return (
@@ -185,7 +185,7 @@ const Main = () => {
         >
           <div className="bg-muted px-3 py-2 flex justify-between items-center cursor-move border-b border-border">
             <span className="font-semibold text-xs text-foreground">Room Chat</span>
-            <button onClick={() => setIsChatOpen(false)} className="text-muted-foreground hover:text-foreground text-sm">
+            <button onClick={() => {setIsChatOpen(false);isChatOpenRef.current = false;}} className="text-muted-foreground hover:text-foreground text-sm">
               ✕
             </button>
           </div>
@@ -209,7 +209,7 @@ const Main = () => {
         <MessageSquare className="h-5 w-5" />
         {unreadCount > 0 && !isChatOpen && (
           <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white border-2 border-background">
-            {unreadCount/2 > 9 ? "9+" : unreadCount/2}
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </Button>
