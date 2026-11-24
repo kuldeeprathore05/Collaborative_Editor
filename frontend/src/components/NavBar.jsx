@@ -11,7 +11,7 @@ import { Play } from "lucide-react";
 import ParticipantsPopover from './Participants.jsx'
 import { Terminal } from "lucide-react";
 
-const Navbar = ({ roomId, language, handleLanguageChange, copyRoomId, leaveRoom, runCode,users,currentUser }) => {
+const Navbar = ({ roomId, language, handleLanguageChange, copyRoomId, leaveRoom, runCode,users,currentUser,connected }) => {
   return (
     <nav className="flex items-center justify-between px-4 py-2 bg-card border-b border-border">
       <div className="flex items-center gap-1.5">
@@ -28,7 +28,7 @@ const Navbar = ({ roomId, language, handleLanguageChange, copyRoomId, leaveRoom,
           {roomId.slice(0, 8)}...
         </Badge>
 
-        <Select value={language} onValueChange={handleLanguageChange}>
+        <Select value={language} onValueChange={handleLanguageChange}  disabled={!connected}>
           <SelectTrigger className="w-[120px] h-8 text-xs bg-background border-border">
             <SelectValue placeholder="Language" />
           </SelectTrigger>
@@ -40,7 +40,7 @@ const Navbar = ({ roomId, language, handleLanguageChange, copyRoomId, leaveRoom,
           </SelectContent>
         </Select>
 
-        <Button onClick={runCode} size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs">
+        <Button onClick={runCode}  disabled={!connected} size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs">
           <Play className="w-3.5 h-3.5" /> Run
         </Button>
       </div>

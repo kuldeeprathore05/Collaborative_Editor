@@ -27,6 +27,7 @@ const Main = () => {
   const [messages, setMessages] = useState([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [connected, setConnected] = useState(false);
   const isChatOpenRef = useRef(false);
 
   useEffect(() => {
@@ -35,33 +36,55 @@ const Main = () => {
       navigate("/login");
       return;
     }
-    const join = () => socket.emit("join", { roomId, token });
 
-    socket.on("connect", join);   // fires on first connect AND every reconnect
-    socket.connect();
-    if (socket.connected) join();
-    
- 
+    // runs on first connect time annd on every automstic reconnect
+    const joinRoom = () => {
+      setConnected(true);
+      socket.emit("join", { roomId, token });
+    };
 
-    const handleUserList = (list) => setUsers(list); 
+    const handleDisconnect = () => {
+      setConnected(false); 
+      setOutPut((prev) =>
+        prev === "Running code..."
+          ? "Connection lost. Run again after reconnecting."
+          : prev
+      );
+    };
+
+    const handleAuthError = () => {
+      toast.error("Session expired, please log in again");
+      navigate("/login");
+    };
+
+    const handleUserList = (list) => setUsers(list);
     const handleLanguageUpdate = (lang) => setLanguage(lang);
     const handleCodeResponse = (res) => setOutPut(res.run.output);
     const handleChatHistory = (history) => setMessages(history);
-
     const handleNewMessage = (msg) => {
       setMessages((prev) => [...prev, msg]);
-      if (!isChatOpenRef.current) setUnreadCount((c) => c + 1);
+      setIsChatOpen((currentlyOpen) => {
+        if (!currentlyOpen) setUnreadCount((prev) => prev + 1);
+        return currentlyOpen;
+      });
     };
 
-    socket.on("userList", handleUserList); 
+    socket.on("connect", joinRoom);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("authError", handleAuthError);
+    socket.on("userList", handleUserList);
     socket.on("languageUpdate", handleLanguageUpdate);
     socket.on("codeResponse", handleCodeResponse);
     socket.on("newMessage", handleNewMessage);
     socket.on("chatHistory", handleChatHistory);
 
+    socket.connect();
+    if (socket.connected) joinRoom();     
     return () => {
-      socket.off("connect", join);
-      socket.off("userList", handleUserList); 
+      socket.off("connect", joinRoom);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("authError", handleAuthError);
+      socket.off("userList", handleUserList);
       socket.off("languageUpdate", handleLanguageUpdate);
       socket.off("codeResponse", handleCodeResponse);
       socket.off("newMessage", handleNewMessage);
@@ -83,14 +106,19 @@ const Main = () => {
   };
 
   const handleLanguageChange = (val) => {
+    if (!connected) return toast.error("You're offline");
     setLanguage(val);
     socket.emit("languageChange", { roomId, language: val });
-  }; 
+  };
+
   const runCode = () => {
+    if (!connected) return toast.error("You're offline");
     setOutPut("Running code...");
     socket.emit("compileCode", { input: userInput });
   };
+
   const sendMessage = (text) => {
+    if (!connected) return toast.error("You're offline");
     socket.emit("sendMessage", { roomId, msg: { text, user: user?.name } });
   };
 
@@ -112,7 +140,13 @@ const Main = () => {
         runCode={runCode}
         users={users}
         currentUser={user?.name}
+        connected={connected}
       />
+      {!connected && (
+        <div className="bg-yellow-500/15 border-b border-yellow-500/30 px-4 py-1.5 text-center text-xs text-yellow-300">
+          Connection lost, reconnecting… Your edits are saved locally and will sync automatically.
+        </div>
+      )}
 
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup orientation="horizontal">

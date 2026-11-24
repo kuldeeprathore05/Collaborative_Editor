@@ -31,29 +31,34 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
     });
 
     const toU8 = (d) => new Uint8Array(d);
-    const sendMyAwareness = () =>
+    const sendMyAwareness = () =>{
+      if (!socket.connected) return;
       socket.emit("awarenessUpdate", {
         clientID: ydoc.clientID,
         update: encodeAwarenessUpdate(awareness, [ydoc.clientID]),
-      });
+      });}
 
     const onDocUpdate = (update, origin) => {
-      if (origin !== "remote") socket.emit("yjsUpdate", update);
+      if (origin !== "remote" && socket.connected) socket.emit("yjsUpdate", update);
     };
     const onAwarenessChange = (_c, origin) => {
       if (origin !== "remote") sendMyAwareness();
     };
     const onRemoteDoc = (u) => Y.applyUpdate(ydoc, toU8(u), "remote");
 
-    const onSync = (u) => {
-        const serverUpdate = toU8(u);
-        Y.applyUpdate(ydoc, serverUpdate, "remote");
-        // send back only what the server doesn't have (offline edits)
-        socket.emit(
-          "yjsUpdate",
-          Y.encodeStateAsUpdate(ydoc, Y.encodeStateVectorFromUpdate(serverUpdate))
-        );
-        sendMyAwareness(); // re-announce my cursor/name
+    const onSync = (serverUpdate) => {
+      const u = toU8(serverUpdate);
+
+      // 1. pull: apply what the server has that I don't
+      Y.applyUpdate(ydoc, u, "remote");
+
+      // 2. push: send what I have that the server doesn't (my offline edits)
+      const serverStateVector = Y.encodeStateVectorFromUpdate(u);
+      const missing = Y.encodeStateAsUpdate(ydoc, serverStateVector);
+      if (missing.length > 2) socket.emit("yjsUpdate", missing);
+
+      // 3. re-announce my cursor/name (new socket id on the server)
+      sendMyAwareness();
     };
     const onRemoteAwareness = (u) => applyAwarenessUpdate(awareness, toU8(u), "remote");
     const onAwarenessRemove = (id) => removeAwarenessStates(awareness, [id], "remote");
