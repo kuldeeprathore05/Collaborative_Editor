@@ -46,6 +46,9 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
     };
     const onRemoteDoc = (u) => Y.applyUpdate(ydoc, toU8(u), "remote");
 
+    const renewAwareness = () =>
+      awareness.setLocalState(awareness.getLocalState());
+
     const onSync = (serverUpdate) => {
       const u = toU8(serverUpdate);
 
@@ -56,15 +59,15 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
       const serverStateVector = Y.encodeStateVectorFromUpdate(u);
       const missing = Y.encodeStateAsUpdate(ydoc, serverStateVector);
       if (missing.length > 2) socket.emit("yjsUpdate", missing);
-
-      // 3. re-announce my cursor/name (new socket id on the server)
-      sendMyAwareness();
+ 
+      renewAwareness();renewAwareness();
     };
     const onRemoteAwareness = (u) => applyAwarenessUpdate(awareness, toU8(u), "remote");
     const onAwarenessRemove = (id) => removeAwarenessStates(awareness, [id], "remote");
 
     ydoc.on("update", onDocUpdate);
     awareness.on("update", onAwarenessChange);
+    socket.on("awarenessQuery", renewAwareness);
     socket.on("yjsSync", onSync);
     socket.on("yjsUpdate", onRemoteDoc);
     socket.on("awarenessUpdate", onRemoteAwareness);
@@ -101,6 +104,7 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
     return () => {
       socket.off("yjsSync", onSync);
       socket.off("yjsUpdate", onRemoteDoc);
+      socket.off("awarenessQuery", renewAwareness);
       socket.off("awarenessUpdate", onRemoteAwareness);
       socket.off("awarenessRemove", onAwarenessRemove);
       socket.off("awarenessQuery", sendMyAwareness);
@@ -115,7 +119,21 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
   useEffect(() => {
     if (!editor || !session) return;
     const ytext = session.ydoc.getText(language);
-    const binding = new MonacoBinding(ytext, editor.getModel(), new Set([editor]), session.awareness);
+    const model = editor.getModel();
+    const binding = new MonacoBinding(ytext, model, new Set([editor]), session.awareness);
+
+    // republish selection against the new Y.Text
+    const sel = editor.getSelection();
+    if (sel) {
+      const clamp = (i) => Math.max(0, Math.min(i, ytext.length));
+      const anchor = clamp(model.getOffsetAt({ lineNumber: sel.selectionStartLineNumber, column: sel.selectionStartColumn }));
+      const head = clamp(model.getOffsetAt({ lineNumber: sel.positionLineNumber, column: sel.positionColumn }));
+      session.awareness.setLocalStateField("selection", {
+        anchor: Y.createRelativePositionFromTypeIndex(ytext, anchor),
+        head: Y.createRelativePositionFromTypeIndex(ytext, head),
+      });
+    }
+
     return () => binding.destroy();
   }, [editor, session, language]);
 

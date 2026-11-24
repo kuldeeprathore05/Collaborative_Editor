@@ -140,7 +140,14 @@ const leaveRoom = async (io, socket) => {
     io.to(roomId).emit("userList", userList(room));
   }
   if (socket.awarenessId != null) {
-    io.to(roomId).emit("awarenessRemove", socket.awarenessId);
+    const id = socket.awarenessId;
     socket.awarenessId = null;
+
+    // don't remove if a newer socket from the same client is already in the room
+    const members = io.sockets.adapter.rooms.get(roomId) ?? new Set();
+    const stillPresent = [...members].some(
+      (sid) => io.sockets.sockets.get(sid)?.awarenessId === id
+    );
+    if (!stillPresent) io.to(roomId).emit("awarenessRemove", id);
   }
 };
