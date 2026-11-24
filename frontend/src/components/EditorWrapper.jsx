@@ -72,7 +72,7 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
     socket.on("yjsUpdate", onRemoteDoc);
     socket.on("awarenessUpdate", onRemoteAwareness);
     socket.on("awarenessRemove", onAwarenessRemove);
-    socket.on("awarenessQuery", sendMyAwareness);
+    // socket.on("awarenessQuery", sendMyAwareness);
 
     // per-user cursor colors / name tags
     const styleEl = document.createElement("style");
@@ -107,7 +107,7 @@ const EditorWrapper = ({ language, handleCodeChange, socket, user }) => {
       socket.off("awarenessQuery", renewAwareness);
       socket.off("awarenessUpdate", onRemoteAwareness);
       socket.off("awarenessRemove", onAwarenessRemove);
-      socket.off("awarenessQuery", sendMyAwareness);
+      // socket.off("awarenessQuery", sendMyAwareness);
       styleEl.remove();
       awareness.destroy();
       ydoc.destroy();

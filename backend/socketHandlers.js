@@ -55,6 +55,7 @@ const getRoom = (roomId) => {
         });
       }
       const room = { doc, language, users: new Map(), messages: [] };
+      if (!state?.length) await saveRoom(roomId, room);  
       doc.on("update", () => scheduleSave(roomId, room));   // registered after hydration
       return room;
     })();
