@@ -10,8 +10,11 @@ const saveTimers = new Map();
 const userList = (room) => [...new Set(room.users.values())];
 
 const saveRoom = async (roomId, room) => {
-  const $set = { currentLanguage: room.language };
-  for (const l of LANGS) $set[`codeSnippets.${l}`] = room.doc.getText(l).toString();
+  const $set = {
+    currentLanguage: room.language,
+    ydoc: Buffer.from(Y.encodeStateAsUpdate(room.doc)),
+  };
+  for (const l of LANGS) $set[`codeSnippets.${l}`] = room.doc.getText(l).toString(); // keep for the dashboard / fallback
   try {
     await Room.updateOne({ roomId }, { $set });
   } catch (err) {
@@ -30,20 +33,27 @@ const getRoom = (roomId) => {
       const doc = new Y.Doc();
       let language = "javascript";
       let snippets = null;
+      let state = null;
       try {
         const dbRoom = await Room.findOne({ roomId });
         if (dbRoom) {
           language = dbRoom.currentLanguage || "javascript";
           snippets = dbRoom.codeSnippets;
+          state = dbRoom.ydoc;
         }
       } catch (err) {
         console.error("Error fetching room:", err);
       }
-      doc.transact(() => {
-        for (const l of LANGS) {
-          doc.getText(l).insert(0, snippets?.get?.(l) ?? `// start coding in ${l}...`);
-        }
-      });
+
+      if (state?.length) {
+        Y.applyUpdate(doc, new Uint8Array(state));
+      } else {
+        doc.transact(() => {
+          for (const l of LANGS) {
+            doc.getText(l).insert(0, snippets?.get?.(l) ?? `// start coding in ${l}...`);
+          }
+        });
+      }
       const room = { doc, language, users: new Map(), messages: [] };
       doc.on("update", () => scheduleSave(roomId, room));   // registered after hydration
       return room;

@@ -9,6 +9,7 @@ const roomSchema = new mongoose.Schema(
       ref: "User",
       required: true
     }, 
+    ydoc: { type: Buffer },
     codeSnippets:{
       type: Map,
       of: String,  
